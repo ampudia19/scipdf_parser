@@ -11,7 +11,7 @@ if __name__ == "__main__":
 
     setup(
         name='scipdf',
-        version='0.1dev',
+        version='0.2',
         description=' Python parser for scientific PDF based on GROBID.',
         long_description=long_description,
         long_description_content_type="text/markdown",
