@@ -3,14 +3,9 @@ import os
 import os.path as op
 from glob import glob
 import urllib
-from typing import Dict 
 import subprocess
 import requests
-import fitz
-from PIL import Image
-import io
 from bs4 import BeautifulSoup, NavigableString
-from tqdm import tqdm, tqdm_notebook
 
 
 GROBID_URL = "http://localhost:8070"
@@ -79,7 +74,7 @@ def parse_pdf(
         url = "%s/api/processFulltextDocument" % grobid_url
     else:
         url = "%s/api/processHeaderDocument" % grobid_url
-    
+
     files = []
     if return_coordinates:
         files += [
@@ -91,24 +86,19 @@ def parse_pdf(
         ]
 
     if isinstance(pdf_path, str):
-        if validate_url(pdf_path) and op.splitext(pdf_path)[-1].lower() != ".pdf":
-            print("The input URL has to end with ``.pdf``")
-            parsed_article = None
-        elif validate_url(pdf_path) and op.splitext(pdf_path)[-1] == ".pdf":
+        if validate_url(pdf_path):
             page = urllib.request.urlopen(pdf_path).read()
             files += [("input", page)]
-            parsed_article = requests.post(url, files=files).text
+            parsed_article = requests.post(url, files=files, timeout=15).text
         elif op.exists(pdf_path):
             files += [("input", (open(pdf_path, "rb")))]
-            parsed_article = requests.post(
-                url, files=files
-            ).text
+            parsed_article = requests.post(url, files=files, timeout=15).text
         else:
             parsed_article = None
     elif isinstance(pdf_path, bytes):
         # assume that incoming is byte string
         files += [("input", (pdf_path))]
-        parsed_article = requests.post(url, files=files).text
+        parsed_article = requests.post(url, files=files, timeout=15).text
     else:
         parsed_article = None
 
@@ -167,10 +157,26 @@ def find_references(div):
     """
     For a given section, find references made in the section for publications, figures, tables
     """
-    publication_ref = [ref.attrs.get("target").strip("#") for ref in div.find_all("ref") if ref.attrs.get("type") == "bibr" and "target" in ref.attrs]
-    figure_ref = [ref.attrs.get("target").strip("#") for ref in div.find_all("ref") if ref.attrs.get("type") == "figure" and "target" in ref.attrs]
-    table_ref = [ref.attrs.get("target").strip("#") for ref in div.find_all("ref") if ref.attrs.get("type") == "table" and "target" in ref.attrs]
-    return {"publication_ref": publication_ref, "figure_ref": figure_ref, "table_ref": table_ref}
+    publication_ref = [
+        ref.attrs.get("target").strip("#")
+        for ref in div.find_all("ref")
+        if ref.attrs.get("type") == "bibr" and "target" in ref.attrs
+    ]
+    figure_ref = [
+        ref.attrs.get("target").strip("#")
+        for ref in div.find_all("ref")
+        if ref.attrs.get("type") == "figure" and "target" in ref.attrs
+    ]
+    table_ref = [
+        ref.attrs.get("target").strip("#")
+        for ref in div.find_all("ref")
+        if ref.attrs.get("type") == "table" and "target" in ref.attrs
+    ]
+    return {
+        "publication_ref": publication_ref,
+        "figure_ref": figure_ref,
+        "table_ref": table_ref,
+    }
 
 
 def parse_sections(article, as_list: bool = False):
@@ -238,7 +244,7 @@ def parse_references(article):
     references = references.find_all("biblstruct") if references is not None else []
     reference_list = []
     for reference in references:
-        ref_id = reference.get('xml:id', "")
+        ref_id = reference.get("xml:id", "")
         title = reference.find("title", attrs={"level": "a"})
         if title is None:
             title = reference.find("title", attrs={"level": "m"})
@@ -264,7 +270,13 @@ def parse_references(article):
                 authors.append(firstname + " " + lastname)
         authors = "; ".join(authors)
         reference_list.append(
-            {"ref_id": ref_id, "title": title, "journal": journal, "year": year, "authors": authors}
+            {
+                "ref_id": ref_id,
+                "title": title,
+                "journal": journal,
+                "year": year,
+                "authors": authors,
+            }
         )
     return reference_list
 
